@@ -2,51 +2,153 @@ package main
 
 import (
 	"database/sql"
-	"flag"
 	"fmt"
 	"os"
 
 	_ "github.com/go-sql-driver/mysql"
 
+	"github.com/aprzybys/sludgebot/internal/services"
+	"github.com/aprzybys/sludgebot/internal/services/webhooks"
+	"github.com/aprzybys/sludgebot/internal/services/webhooks/msghook"
 	"github.com/keybase/go-keybase-chat-bot/kbchat"
 	"github.com/keybase/go-keybase-chat-bot/kbchat/types/chat1"
 	"github.com/keybase/managed-bots/base"
-	"github.com/aprzybys/sludgebot/common"
-	"github.com/aprzybys/sludgebot/webhooks"
+	"github.com/mjwhitta/cli"
+	"github.com/mjwhitta/log"
 	"golang.org/x/sync/errgroup"
 )
 
+const back = "`"
+const backs = "```"
+
+type BotServer struct {
+	Server *base.Server
+	opts   Options
+	kbc    *kbchat.API
+}
+
 type Options struct {
-	*base.Options
+	Options    *base.Options
 	HTTPPrefix string
 }
 
-func NewOptions() *Options {
-	return &Options{
+// Exit status
+const (
+	Good = iota
+	InvalidOption
+	MissingOption
+	InvalidArgument
+	MissingArgument
+	ExtraArgument
+	Exception
+)
+
+// Flags
+var flags struct {
+	databaseURI    string
+	httpPrefix     string
+	webhookCommand string
+}
+
+func init() {
+	cli.Align = true
+	cli.Authors = []string{"Adam Przybyszewski <aprzybys@err.cx>"}
+	cli.Banner = fmt.Sprintf("%s [OPTIONS] <arg>", os.Args[0])
+	cli.BugEmail = "sludgebot-dev@err.cx"
+	cli.ExitStatus(
+		"Normally the exit status is 0. In the event of an error the",
+		"exit status will be one of the below:\n\n",
+		fmt.Sprintf("  %d: Invalid option\n", InvalidOption),
+		fmt.Sprintf("  %d: Missing option\n", MissingOption),
+		fmt.Sprintf("  %d: Invalid argument\n", InvalidArgument),
+		fmt.Sprintf("  %d: Missing argument\n", MissingArgument),
+		fmt.Sprintf("  %d: Extra argument\n", ExtraArgument),
+		fmt.Sprintf("  %d: Exception", Exception),
+	)
+	cli.Info(
+		"Sludgebot is the award-winning product resulting from years",
+		"of research.",
+	)
+	cli.MaxWidth = 80
+	cli.TabWidth = 4 // Defaults to 4
+	cli.Title = "Sludgebot"
+
+	// Parse cli flags
+	cli.Flag(
+		&flags.databaseURI,
+		"d",
+		"database",
+		"",
+		"Database URI in DSN format",
+	)
+	cli.Flag(
+		&flags.httpPrefix,
+		"msghook-prefix",
+		"",
+		"HTTP prefix for generated msghooks",
+	)
+	cli.Flag(
+		&flags.webhookCommand,
+		"msghook-cmd",
+		"msghook",
+		"Command run to access msghook functionality",
+	)
+	cli.Parse()
+}
+
+func main() {
+	validate()
+
+	var _ *msghook.MsghookOptions = &msghook.MsghookOptions{
+		Command:    flags.webhookCommand,
+		HTTPPrefix: flags.httpPrefix,
+	}
+
+	opts := &Options{
 		Options: base.NewOptions(),
 	}
-}
+	opts.HTTPPrefix = flags.httpPrefix
+	opts.Options.DSN = flags.databaseURI
 
-type BotServer struct {
-	*base.Server
-
-	opts Options
-	kbc  *kbchat.API
-}
-
-func NewBotServer(opts Options) *BotServer {
-	return &BotServer{
-		Server: base.NewServer("sludgebot", opts.Announcement, opts.AWSOpts, opts.MultiDSN, opts.ReadSelf, kbchat.RunOptions{
-			KeybaseLocation: opts.KeybaseLocation,
-			HomeDir:         opts.Home,
-			NumPipes:        5,
-		}),
-		opts: opts,
+	var run_options = kbchat.RunOptions{
+		KeybaseLocation: opts.Options.KeybaseLocation,
+		HomeDir:         opts.Options.Home,
+		NumPipes:        5,
 	}
+	var new_server = base.NewServer(
+		"sludgebot",
+		opts.Options.Announcement,
+		opts.Options.AWSOpts,
+		opts.Options.MultiDSN,
+		opts.Options.ReadSelf,
+		run_options,
+	)
+
+	var bs = &BotServer{
+		Server: new_server,
+		opts:   *opts,
+	}
+
+	if err := bs.Go(); err != nil {
+		fmt.Printf("error running chat loop: %s\n", err)
+		os.Exit(Exception)
+	}
+
+	os.Exit(Good)
 }
 
-const back = "`"
-const backs = "```"
+func validate() {
+
+	// Validate cli args
+	if cli.NFlag() == 0 {
+		cli.Usage(MissingArgument)
+	} else if flags.databaseURI == "" {
+		log.ErrfX(MissingOption, "Missing argument: %s", "database")
+	} else if flags.httpPrefix == "" {
+		log.ErrfX(MissingOption, "Missing argument: %s", "msghook-prefix")
+	}
+
+}
 
 func (s *BotServer) makeAdvertisement() kbchat.Advertisement {
 	createExtended := fmt.Sprintf(`Create a new webhook for sending messages into the current conversation. You must supply a name as well to identify the webhook. To use a webhook URL, supply a %smsg%s URL parameter, or a JSON POST body with a field %smsg%s.
@@ -97,60 +199,34 @@ Remove a webhook`,
 }
 
 func (s *BotServer) Go() (err error) {
-	if s.kbc, err = s.Start(s.opts.ErrReportConv); err != nil {
+	if s.kbc, err = s.Server.Start(s.opts.Options.ErrReportConv); err != nil {
 		return err
 	}
-	sdb, err := sql.Open("mysql", s.opts.DSN)
+	sdb, err := sql.Open("mysql", s.opts.Options.DSN)
 	if err != nil {
-		s.Errorf("failed to connect to MySQL: %s", err)
+		s.Server.Errorf("failed to connect to MySQL: %s", err)
 		return err
 	}
 	defer sdb.Close()
-	db := common.NewDB(sdb)
+	db := webhooks.NewDB(sdb)
 
-	debugConfig := base.NewChatDebugOutputConfig(s.kbc, s.opts.ErrReportConv)
-	stats, err := base.NewStatsRegistry(debugConfig, s.opts.StathatEZKey)
+	debugConfig := base.NewChatDebugOutputConfig(s.kbc, s.opts.Options.ErrReportConv)
+	stats, err := base.NewStatsRegistry(debugConfig, s.opts.Options.StathatEZKey)
 	if err != nil {
-		s.Debug("unable to create stats: %v", err)
+		s.Server.Debug("unable to create stats: %v", err)
 		return err
 	}
-	stats = stats.SetPrefix(s.Name())
-	httpSrv := webhooks.NewHTTPSrv(stats, debugConfig, db)
-	handler := webhooks.NewHandler(stats, s.kbc, debugConfig, httpSrv, db, s.opts.HTTPPrefix)
+	stats = stats.SetPrefix(s.Server.Name())
+	httpSrv := services.NewHTTPSrv(stats, debugConfig, db)
+	webhookHandler := services.NewHandler(stats, s.kbc, debugConfig, httpSrv, db, s.opts.HTTPPrefix)
 	eg := &errgroup.Group{}
-	s.GoWithRecover(eg, func() error { return s.Listen(handler) })
-	s.GoWithRecover(eg, httpSrv.Listen)
-	s.GoWithRecover(eg, func() error { return s.HandleSignals(httpSrv, stats) })
-	s.GoWithRecover(eg, func() error { return s.AnnounceAndAdvertise(s.makeAdvertisement(), "I live.") })
+	s.Server.GoWithRecover(eg, func() error { return s.Server.Listen(webhookHandler) })
+	s.Server.GoWithRecover(eg, httpSrv.Listen)
+	s.Server.GoWithRecover(eg, func() error { return s.Server.HandleSignals(httpSrv, stats) })
+	s.Server.GoWithRecover(eg, func() error { return s.Server.AnnounceAndAdvertise(s.makeAdvertisement(), "I live.") })
 	if err := eg.Wait(); err != nil {
-		s.Debug("wait error: %s", err)
+		s.Server.Debug("wait error: %s", err)
 		return err
 	}
 	return nil
-}
-
-func main() {
-	rc := mainInner()
-	os.Exit(rc)
-}
-
-func mainInner() int {
-	opts := NewOptions()
-	fs := flag.NewFlagSet(os.Args[0], flag.ExitOnError)
-	fs.StringVar(&opts.HTTPPrefix, "http-prefix", os.Getenv("BOT_HTTP_PREFIX"),
-		"Desired prefix for generated webhooks")
-	if err := opts.Parse(fs, os.Args); err != nil {
-		fmt.Printf("Unable to parse options: %v\n", err)
-		return 3
-	}
-	if len(opts.DSN) == 0 {
-		fmt.Printf("must specify a database DSN\n")
-		return 3
-	}
-	bs := NewBotServer(*opts)
-	if err := bs.Go(); err != nil {
-		fmt.Printf("error running chat loop: %s\n", err)
-		return 3
-	}
-	return 0
 }

@@ -8,6 +8,8 @@ require (
 	github.com/gorilla/mux v1.8.1
 	github.com/keybase/go-keybase-chat-bot v0.0.0-20250106203511-859265729a56
 	github.com/keybase/managed-bots v0.0.0-20250203192415-012073fb01d7
+	github.com/mjwhitta/cli v1.12.7
+	github.com/mjwhitta/log v1.6.11
 	golang.org/x/sync v0.12.0
 )
 
@@ -20,6 +22,8 @@ require (
 	github.com/jmespath/go-jmespath v0.0.0-20180206201540-c2b33e8439af // indirect
 	github.com/kballard/go-shellquote v0.0.0-20180428030007-95032a82bc51 // indirect
 	github.com/keybase/go-codec v0.0.0-20180928230036-164397562123 // indirect
+	github.com/mjwhitta/errors v1.0.4 // indirect
+	github.com/mjwhitta/hilighter v1.11.11 // indirect
 	github.com/pmezard/go-difflib v1.0.0 // indirect
 	github.com/stathat/go v1.0.0 // indirect
 	github.com/stretchr/testify v1.10.0 // indirect

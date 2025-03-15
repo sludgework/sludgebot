@@ -31,6 +31,14 @@ github.com/keybase/managed-bots v0.0.0-20250203192415-012073fb01d7 h1:mCPR0IlvCr
 github.com/keybase/managed-bots v0.0.0-20250203192415-012073fb01d7/go.mod h1:v+YG6/zp+flqphhA0Rpy2KwbgqkJom96dXPx1gmKdrU=
 github.com/kr/text v0.2.0 h1:5Nx0Ya0ZqY2ygV366QzturHI13Jq95ApcVaJBhpS+AY=
 github.com/kr/text v0.2.0/go.mod h1:eLer722TekiGuMkidMxC/pM04lWEeraHUUmBw8l2grE=
+github.com/mjwhitta/cli v1.12.7 h1:2/2JyNuYGNcV6qLYZ3sNEUWsNlhNfvGSh2JFxXfrdMI=
+github.com/mjwhitta/cli v1.12.7/go.mod h1:SyJPVsVOhE4Ja5mUeR90FtcikKrSAt2zysLGedXItfc=
+github.com/mjwhitta/errors v1.0.4 h1:w7cofUxHfJAB1VD8VvcDsnTbrpt89hE5511U2Oak0y0=
+github.com/mjwhitta/errors v1.0.4/go.mod h1:7uD4rO2nxbOcHN0EaV2JhVnxuK/0eVtFZ0mCABjqXlM=
+github.com/mjwhitta/hilighter v1.11.11 h1:ETDnVI1MJM9qpOiXmeaHM73nveYuFf4+e8EPe2+HHLM=
+github.com/mjwhitta/hilighter v1.11.11/go.mod h1:sC4djdlJlIUZi6bOTZUx0OyBMyVdAjscyEIsgbWbQIE=
+github.com/mjwhitta/log v1.6.11 h1:OoHF9ST8BUdRNng6RHrJ0ZUoC2qL/NvtwYi1D8tp7mo=
+github.com/mjwhitta/log v1.6.11/go.mod h1:qIxKeBX73paKz0UvBWZE54BzEUhb8o2p13wvDhiavw8=
 github.com/niemeyer/pretty v0.0.0-20200227124842-a10e7caefd8e h1:fD57ERR4JtEqsWbfPhv4DMiApHyliiK5xCTNVSPiaAs=
 github.com/niemeyer/pretty v0.0.0-20200227124842-a10e7caefd8e/go.mod h1:zD1mROLANZcx1PVRCS0qkT7pwLkGfwJo4zjcN/Tysno=
 github.com/pmezard/go-difflib v1.0.0 h1:4DBwDE0NGyQoBHbLQYPwSUPoCMWR5BEzIk/f1lZbAQM=

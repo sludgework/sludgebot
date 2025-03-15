@@ -1,4 +1,4 @@
-package common
+package webhooks
 
 import (
 	"crypto/hmac"
@@ -36,6 +36,7 @@ func (d *DB) makeID(name string, convID chat1.ConvIDStr) (string, error) {
 }
 
 func (d *DB) Create(name string, convID chat1.ConvIDStr) (string, error) {
+	var hookType string = "msghook"
 	id, err := d.makeID(name, convID)
 	if err != nil {
 		return "", err
@@ -43,10 +44,10 @@ func (d *DB) Create(name string, convID chat1.ConvIDStr) (string, error) {
 	err = d.RunTxn(func(tx *sql.Tx) error {
 		if _, err := tx.Exec(`
 			INSERT INTO hooks
-			(id, name, conv_id)
+			(id, name, conv_id, hook_type)
 			VALUES
-			(?, ?, ?)
-		`, id, name, convID); err != nil {
+			(?, ?, ?, ?)
+		`, id, name, convID, hookType); err != nil {
 			return err
 		}
 		return nil
@@ -56,23 +57,24 @@ func (d *DB) Create(name string, convID chat1.ConvIDStr) (string, error) {
 
 func (d *DB) GetHook(id string) (res Webhook, err error) {
 	row := d.DB.QueryRow(`
-		SELECT conv_id, name FROM hooks WHERE id = ?
+		SELECT conv_id, name, hook_type FROM hooks WHERE id = ?
 	`, id)
-	if err := row.Scan(&res.ConvID, &res.Name); err != nil {
+	if err := row.Scan(&res.ConvID, &res.Name, &res.HookType); err != nil {
 		return res, err
 	}
 	return res, nil
 }
 
 type Webhook struct {
-	ID     string
-	ConvID chat1.ConvIDStr
-	Name   string
+	ID       string
+	ConvID   chat1.ConvIDStr
+	HookType HookType
+	Name     string
 }
 
 func (d *DB) List(convID chat1.ConvIDStr) (res []Webhook, err error) {
 	rows, err := d.DB.Query(`
-		SELECT id, name FROM hooks WHERE conv_id = ?
+		SELECT id, name, hook_type FROM hooks WHERE conv_id = ?
 	`, convID)
 	if err != nil {
 		return nil, err
@@ -81,7 +83,7 @@ func (d *DB) List(convID chat1.ConvIDStr) (res []Webhook, err error) {
 	for rows.Next() {
 		var hook Webhook
 		hook.ConvID = convID
-		if err := rows.Scan(&hook.ID, &hook.Name); err != nil {
+		if err := rows.Scan(&hook.ID, &hook.Name, &hook.HookType); err != nil {
 			return res, err
 		}
 		res = append(res, hook)

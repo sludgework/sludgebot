@@ -1,11 +1,11 @@
-package webhooks
+package services
 
 import (
 	"errors"
 	"fmt"
 	"strings"
 
-	"github.com/aprzybys/sludgebot/common"
+	"github.com/aprzybys/sludgebot/internal/services/webhooks"
 	"github.com/keybase/go-keybase-chat-bot/kbchat"
 	"github.com/keybase/go-keybase-chat-bot/kbchat/types/chat1"
 	"github.com/keybase/managed-bots/base"
@@ -16,7 +16,7 @@ type Handler struct {
 
 	stats      *base.StatsRegistry
 	kbc        *kbchat.API
-	db         *common.DB
+	db         *webhooks.DB
 	httpSrv    *HTTPSrv
 	httpPrefix string
 }
@@ -24,7 +24,7 @@ type Handler struct {
 var _ base.Handler = (*Handler)(nil)
 
 func NewHandler(stats *base.StatsRegistry, kbc *kbchat.API, debugConfig *base.ChatDebugOutputConfig,
-	httpSrv *HTTPSrv, db *common.DB, httpPrefix string) *Handler {
+	httpSrv *HTTPSrv, db *webhooks.DB, httpPrefix string) *Handler {
 	return &Handler{
 		DebugOutput: base.NewDebugOutput("Handler", debugConfig),
 		stats:       stats.SetPrefix("Handler"),
@@ -148,6 +148,7 @@ func (h *Handler) HandleCommand(msg chat1.MsgSummary) error {
 	if msg.Content.Text == nil {
 		return nil
 	}
+
 	cmd := strings.TrimSpace(msg.Content.Text.Body)
 	switch {
 	case strings.HasPrefix(cmd, "!webhook create"):

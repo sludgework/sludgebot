@@ -1,4 +1,4 @@
-package webhooks
+package services
 
 import (
 	"bytes"
@@ -10,7 +10,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/aprzybys/sludgebot/common"
+	"github.com/aprzybys/sludgebot/internal/services/webhooks"
 	"github.com/didip/tollbooth/v7"
 	"github.com/gorilla/mux"
 	"github.com/keybase/managed-bots/base"
@@ -19,10 +19,10 @@ import (
 type HTTPSrv struct {
 	*base.HTTPSrv
 
-	db *common.DB
+	db *webhooks.DB
 }
 
-func NewHTTPSrv(stats *base.StatsRegistry, debugConfig *base.ChatDebugOutputConfig, db *common.DB) *HTTPSrv {
+func NewHTTPSrv(stats *base.StatsRegistry, debugConfig *base.ChatDebugOutputConfig, db *webhooks.DB) *HTTPSrv {
 	h := &HTTPSrv{
 		db: db,
 	}
