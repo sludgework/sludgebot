@@ -28,8 +28,8 @@ type BotServer struct {
 }
 
 type Options struct {
-	Options    *base.Options
-	HTTPPrefix string
+	MsghookOptions *msghook.MsghookOptions
+	Options        *base.Options
 }
 
 // Exit status
@@ -99,22 +99,69 @@ func init() {
 func main() {
 	validate()
 
-	var _ *msghook.MsghookOptions = &msghook.MsghookOptions{
-		Command:    flags.webhookCommand,
-		HTTPPrefix: flags.httpPrefix,
-	}
-
+	// For base.NewOtions() - github.com/keybase/managed-bots/base:
+	// ------------------------------------------------------------
+	// type Options struct {
+	// 	// Location of the keybase binary
+	// 	KeybaseLocation string
+	// 	// Home directory for keybase service
+	// 	Home string
+	// 	// Conversation name or ID to announce when the bot begins
+	// 	Announcement string
+	// 	// Conversation name or ID to report bot errors to
+	// 	ErrReportConv string
+	// 	// Database Source Name
+	// 	DSN          string
+	// 	MultiDSN     string
+	// 	StathatEZKey string
+	// 	// Allow the bot to read it's own messages (default: false)
+	// 	ReadSelf bool
+	// 	AWSOpts  *AWSOptions
+	// }
 	opts := &Options{
+		MsghookOptions: &msghook.MsghookOptions{
+			Command:    flags.webhookCommand,
+			HTTPPrefix: flags.httpPrefix,
+		},
 		Options: base.NewOptions(),
 	}
-	opts.HTTPPrefix = flags.httpPrefix
 	opts.Options.DSN = flags.databaseURI
 
+	// From "github.com/keybase/go-keybase-chat-bot/kbchat":
+	// ------------------------------------------------------------
+	// type RunOptions struct {
+	//     KeybaseLocation string
+	//     HomeDir         string
+	//     Oneshot         *OneshotOptions
+	//     StartService    bool
+	//     // Have the bot send/receive typing notifications
+	//     EnableTyping bool
+	//     // Disable bot lite mode
+	//     DisableBotLiteMode bool
+	//     // Number of processes to spin up to connect to the keybase service
+	//     NumPipes int
+	// }
 	var run_options = kbchat.RunOptions{
 		KeybaseLocation: opts.Options.KeybaseLocation,
 		HomeDir:         opts.Options.Home,
 		NumPipes:        5,
 	}
+
+	// From github.com/keybase/managed-bots/base:
+	// type Server struct {
+	//     *DebugOutput
+	//     sync.Mutex
+	//     shutdownCh chan struct{}
+	//     name         string
+	//     announcement string
+	//     awsOpts      *AWSOptions
+	//     kbc          *kbchat.API
+	//     botAdmins    []string
+	//     multiDBDSN   string
+	//     multi        *multi
+	//     readSelf     bool
+	//     runOptions kbchat.RunOptions
+	// }
 	var new_server = base.NewServer(
 		"sludgebot",
 		opts.Options.Announcement,
@@ -147,7 +194,6 @@ func validate() {
 	} else if flags.httpPrefix == "" {
 		log.ErrfX(MissingOption, "Missing argument: %s", "msghook-prefix")
 	}
-
 }
 
 func (s *BotServer) makeAdvertisement() kbchat.Advertisement {
@@ -218,7 +264,7 @@ func (s *BotServer) Go() (err error) {
 	}
 	stats = stats.SetPrefix(s.Server.Name())
 	httpSrv := services.NewHTTPSrv(stats, debugConfig, db)
-	webhookHandler := services.NewHandler(stats, s.kbc, debugConfig, httpSrv, db, s.opts.HTTPPrefix)
+	webhookHandler := services.NewHandler(stats, s.kbc, debugConfig, httpSrv, db, s.opts.MsghookOptions.HTTPPrefix)
 	eg := &errgroup.Group{}
 	s.Server.GoWithRecover(eg, func() error { return s.Server.Listen(webhookHandler) })
 	s.Server.GoWithRecover(eg, httpSrv.Listen)
