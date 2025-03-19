@@ -18,19 +18,17 @@ import (
 
 type HTTPSrv struct {
 	*base.HTTPSrv
-
 	db *webhooks.DB
 }
 
 func NewHTTPSrv(stats *base.StatsRegistry, debugConfig *base.ChatDebugOutputConfig, db *webhooks.DB) *HTTPSrv {
-	h := &HTTPSrv{
-		db: db,
-	}
+	h := &HTTPSrv{}
+	h.db = db
 	h.HTTPSrv = base.NewHTTPSrv(stats, debugConfig)
 	rtr := mux.NewRouter()
-	rtr.HandleFunc("/sludgebot", h.handleHealthCheck)
+	rtr.HandleFunc("/health", h.handleHealthCheck)
 	// restrict to 1req/sec
-	rtr.Handle("/sludgebot/{id:[A-Za-z0-9_-]+}", tollbooth.LimitFuncHandler(tollbooth.NewLimiter(1, nil), h.handleHook))
+	rtr.Handle("/{id:[A-Za-z0-9_-]+}", tollbooth.LimitFuncHandler(tollbooth.NewLimiter(1, nil), h.handleHook))
 	http.Handle("/", rtr)
 	return h
 }

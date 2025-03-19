@@ -8,6 +8,19 @@ import (
 
 	"github.com/keybase/go-keybase-chat-bot/kbchat/types/chat1"
 	"github.com/keybase/managed-bots/base"
+	"github.com/mjwhitta/log"
+)
+
+const (
+	sqlCreate string = `` +
+		`INSERT INTO hooks (id, name, conv_id, hook_type) VALUES ` +
+		`(?, ?, ?, ?)`
+	sqlDeleteHook string = `` +
+		`DELETE FROM hooks WHERE conv_id = ? AND name = ?`
+	sqlGetHook string = `` +
+		`SELECT conv_id, name, hook_type FROM hooks WHERE id = ?`
+	sqlGetHooks string = `` +
+		`SELECT id, name, hook_type FROM hooks WHERE conv_id = ?`
 )
 
 type DB struct {
@@ -36,18 +49,23 @@ func (d *DB) makeID(name string, convID chat1.ConvIDStr) (string, error) {
 }
 
 func (d *DB) Create(name string, convID chat1.ConvIDStr) (string, error) {
-	var hookType string = "msghook"
+	var hookType int = WebhookMsg
 	id, err := d.makeID(name, convID)
 	if err != nil {
 		return "", err
 	}
+
+	log.Infof("Creating webhook [%s: %+v]", name, convID)
 	err = d.RunTxn(func(tx *sql.Tx) error {
-		if _, err := tx.Exec(`
-			INSERT INTO hooks
-			(id, name, conv_id, hook_type)
-			VALUES
-			(?, ?, ?, ?)
-		`, id, name, convID, hookType); err != nil {
+		_, err := tx.Exec(
+			sqlCreate,
+			id,
+			name,
+			convID,
+			hookType,
+		)
+		if err != nil {
+			log.Errf("Failed to create webhook: %+v", err)
 			return err
 		}
 		return nil
@@ -56,10 +74,10 @@ func (d *DB) Create(name string, convID chat1.ConvIDStr) (string, error) {
 }
 
 func (d *DB) GetHook(id string) (res Webhook, err error) {
-	row := d.DB.QueryRow(`
-		SELECT conv_id, name, hook_type FROM hooks WHERE id = ?
-	`, id)
+	log.Infof("Retrieving webhook [%s]", id)
+	row := d.DB.QueryRow(sqlGetHook, id)
 	if err := row.Scan(&res.ConvID, &res.Name, &res.HookType); err != nil {
+		log.Errf("Failed to retrieve webhook: [%+v]: %+v", res, err)
 		return res, err
 	}
 	return res, nil
@@ -73,13 +91,14 @@ type Webhook struct {
 }
 
 func (d *DB) List(convID chat1.ConvIDStr) (res []Webhook, err error) {
-	rows, err := d.DB.Query(`
-		SELECT id, name, hook_type FROM hooks WHERE conv_id = ?
-	`, convID)
+	log.Infof("Listing webhooks [%+v]", convID)
+	rows, err := d.DB.Query(sqlGetHooks, convID)
 	if err != nil {
+		log.Errf("Failed to list webhooks: [%+v]: %+v", convID, err)
 		return nil, err
 	}
 	defer rows.Close()
+
 	for rows.Next() {
 		var hook Webhook
 		hook.ConvID = convID
@@ -92,10 +111,9 @@ func (d *DB) List(convID chat1.ConvIDStr) (res []Webhook, err error) {
 }
 
 func (d *DB) Remove(name string, convID chat1.ConvIDStr) error {
+	log.Infof("Deleting webhooks [%s: %+v]", name, convID)
 	return d.RunTxn(func(tx *sql.Tx) error {
-		_, err := tx.Exec(`
-			DELETE FROM hooks WHERE conv_id = ? AND name = ?
-		`, convID, name)
+		_, err := tx.Exec(sqlDeleteHook, convID, name)
 		return err
 	})
 }

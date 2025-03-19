@@ -6,3 +6,5 @@ CREATE TABLE `hooks` (
   PRIMARY KEY (`id`),
   KEY `conv_id` (`conv_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8;
+
+GRANT ALL PRIVILEGES ON sludgework.* TO 'sludgebot'@'%' WITH GRANT OPTION;

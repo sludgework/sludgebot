@@ -176,6 +176,7 @@ func main() {
 		opts:   *opts,
 	}
 
+	log.Infof("Let's go!")
 	if err := bs.Go(); err != nil {
 		fmt.Printf("error running chat loop: %s\n", err)
 		os.Exit(Exception)
@@ -197,36 +198,36 @@ func validate() {
 }
 
 func (s *BotServer) makeAdvertisement() kbchat.Advertisement {
-	createExtended := fmt.Sprintf(`Create a new webhook for sending messages into the current conversation. You must supply a name as well to identify the webhook. To use a webhook URL, supply a %smsg%s URL parameter, or a JSON POST body with a field %smsg%s.
+	createExtended := fmt.Sprintf(`Create a new msghook for sending messages into the current conversation. You must supply a name as well to identify the msghook. To use a msghook URL, supply a %smsg%s URL parameter, or a JSON POST body with a field %smsg%s.
 
 	Example:%s
-		!webhook create alerts%s`, back, back, back, back, backs, backs)
-	removeExtended := fmt.Sprintf(`Remove a webhook from the current conversation. You must supply the name of the webhook.
+		!msghook create alerts%s`, back, back, back, back, backs, backs)
+	removeExtended := fmt.Sprintf(`Remove a msghook from the current conversation. You must supply the name of the msghook.
 
 	Example:%s
-		!webhook remove alerts%s`, backs, backs)
+		!msghook remove alerts%s`, backs, backs)
 
 	cmds := []chat1.UserBotCommandInput{
 		{
-			Name:        "webhook create",
-			Description: "Create a new webhook for sending into the current conversation",
+			Name:        "msghook create",
+			Description: "Create a new msghook for sending into the current conversation",
 			ExtendedDescription: &chat1.UserBotExtendedDescription{
-				Title: `*!webhook create* <name>
-Create a webhook`,
+				Title: `*!msghook create* <name>
+Create a msghook`,
 				DesktopBody: createExtended,
 				MobileBody:  createExtended,
 			},
 		},
 		{
-			Name:        "webhook list",
-			Description: "List active webhooks in the current conversation",
+			Name:        "msghook list",
+			Description: "List active msghooks in the current conversation",
 		},
 		{
-			Name:        "webhook remove",
-			Description: "Remove a webhook from the current conversation",
+			Name:        "msghook remove",
+			Description: "Remove a msghook from the current conversation",
 			ExtendedDescription: &chat1.UserBotExtendedDescription{
-				Title: `*!webhook remove* <name>
-Remove a webhook`,
+				Title: `*!msghook remove* <name>
+Remove a msghook`,
 				DesktopBody: removeExtended,
 				MobileBody:  removeExtended,
 			},
@@ -234,7 +235,7 @@ Remove a webhook`,
 		base.GetFeedbackCommandAdvertisement(s.kbc.GetUsername()),
 	}
 	return kbchat.Advertisement{
-		Alias: "Webhooks",
+		Alias: "msghooks",
 		Advertisements: []chat1.AdvertiseCommandAPIParam{
 			{
 				Typ:      "public",
@@ -248,13 +249,20 @@ func (s *BotServer) Go() (err error) {
 	if s.kbc, err = s.Server.Start(s.opts.Options.ErrReportConv); err != nil {
 		return err
 	}
-	sdb, err := sql.Open("mysql", s.opts.Options.DSN)
+
+	sqlDb, err := sql.Open("mysql", s.opts.Options.DSN)
 	if err != nil {
-		s.Server.Errorf("failed to connect to MySQL: %s", err)
+		log.Errf("Failed to connect to MySQL: %s", err)
 		return err
 	}
-	defer sdb.Close()
-	db := webhooks.NewDB(sdb)
+	defer sqlDb.Close()
+
+	log.Infof("Testing SQL Connection")
+	err = sqlDb.Ping()
+	if err != nil {
+		log.Errf("Could not ping sqlDb: %s", err.Error())
+		return err
+	}
 
 	debugConfig := base.NewChatDebugOutputConfig(s.kbc, s.opts.Options.ErrReportConv)
 	stats, err := base.NewStatsRegistry(debugConfig, s.opts.Options.StathatEZKey)
@@ -263,10 +271,17 @@ func (s *BotServer) Go() (err error) {
 		return err
 	}
 	stats = stats.SetPrefix(s.Server.Name())
-	httpSrv := services.NewHTTPSrv(stats, debugConfig, db)
-	webhookHandler := services.NewHandler(stats, s.kbc, debugConfig, httpSrv, db, s.opts.MsghookOptions.HTTPPrefix)
+
+	var webhookHandler *webhooks.WebhookHandler = &webhooks.WebhookHandler{
+		DB:         webhooks.NewDB(sqlDb),
+		HttpPrefix: s.opts.MsghookOptions.HTTPPrefix,
+	}
+
+	httpSrv := services.NewHTTPSrv(stats, debugConfig, webhookHandler.DB)
+
+	h := services.NewHandler(stats, s.kbc, debugConfig, httpSrv, webhookHandler)
 	eg := &errgroup.Group{}
-	s.Server.GoWithRecover(eg, func() error { return s.Server.Listen(webhookHandler) })
+	s.Server.GoWithRecover(eg, func() error { return s.Server.Listen(h) })
 	s.Server.GoWithRecover(eg, httpSrv.Listen)
 	s.Server.GoWithRecover(eg, func() error { return s.Server.HandleSignals(httpSrv, stats) })
 	s.Server.GoWithRecover(eg, func() error { return s.Server.AnnounceAndAdvertise(s.makeAdvertisement(), "I live.") })
